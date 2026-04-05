@@ -1,0 +1,38 @@
+{
+  "pr_title": "Add login and search endpoints",
+  "pr_description": "Adds a login route and a product search endpoint to the Flask app.",
+  "files": {
+    "app.py": "from flask import Flask, request, jsonify\nimport sqlite3\n\napp = Flask(__name__)\n\n@app.route('/login', methods=['POST'])\ndef login():\n    username = request.form['username']\n    password = request.form['password']\n    conn = sqlite3.connect('users.db')\n    cur = conn.cursor()\n    query = f\"SELECT * FROM users WHERE username='{username}' AND password='{password}'\"\n    cur.execute(query)\n    user = cur.fetchone()\n    if user:\n        return jsonify({'status': 'ok', 'user_id': user[0]})\n    return jsonify({'status': 'fail'}), 401\n\n@app.route('/search')\ndef search():\n    term = request.args.get('q')\n    conn = sqlite3.connect('products.db')\n    cur = conn.cursor()\n    cur.execute(f\"SELECT * FROM products WHERE name LIKE '%{term}%'\")\n    results = cur.fetchall()\n    return jsonify(results)\n"
+  },
+  "diff": "--- a/app.py\n+++ b/app.py\n@@ -0,0 +1,22 @@\n+from flask import Flask, request, jsonify\n+import sqlite3\n+\n+app = Flask(__name__)\n+\n+@app.route('/login', methods=['POST'])\n+def login():\n+    username = request.form['username']\n+    password = request.form['password']\n+    conn = sqlite3.connect('users.db')\n+    cur = conn.cursor()\n+    query = f\"SELECT * FROM users WHERE username='{username}' AND password='{password}'\"\n+    cur.execute(query)\n+    user = cur.fetchone()\n+    if user:\n+        return jsonify({'status': 'ok', 'user_id': user[0]})\n+    return jsonify({'status': 'fail'}), 401\n+\n+@app.route('/search')\n+def search():\n+    term = request.args.get('q')\n+    conn = sqlite3.connect('products.db')\n+    cur = conn.cursor()\n+    cur.execute(f\"SELECT * FROM products WHERE name LIKE '%{term}%'\")\n+    results = cur.fetchall()\n+    return jsonify(results)\n",
+  "ground_truth_issues": [
+    {
+      "issue_type": "security",
+      "line_number": 11,
+      "severity": "critical",
+      "description": "SQL injection vulnerability in login: user input is directly interpolated into the SQL query string",
+      "suggested_fix": "Use parameterized queries: cur.execute('SELECT * FROM users WHERE username=? AND password=?', (username, password))"
+    },
+    {
+      "issue_type": "security",
+      "line_number": 8,
+      "severity": "high",
+      "description": "Password is compared in plaintext — passwords must be hashed using bcrypt or argon2",
+      "suggested_fix": "Hash passwords at registration and use bcrypt.checkpw() at login"
+    },
+    {
+      "issue_type": "security",
+      "line_number": 24,
+      "severity": "critical",
+      "description": "SQL injection vulnerability in search endpoint: term is directly interpolated into query",
+      "suggested_fix": "Use parameterized query: cur.execute('SELECT * FROM products WHERE name LIKE ?', (f'%{term}%',))"
+    },
+    {
+      "issue_type": "security",
+      "line_number": 15,
+      "severity": "medium",
+      "description": "Missing authentication check on /search endpoint — any unauthenticated user can search products",
+      "suggested_fix": "Add a session or token check before executing the search"
+    }
+  ]
+}

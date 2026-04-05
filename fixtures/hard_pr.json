@@ -1,0 +1,53 @@
+{
+  "pr_title": "Add async job processor and user token system",
+  "pr_description": "Introduces a background job queue processor and a token-based auth system.",
+  "files": {
+    "job_processor.py": "import threading\nimport hashlib\nimport time\n\njob_results = {}\n\nclass JobProcessor:\n    def __init__(self):\n        self.jobs = []\n        self.lock = threading.Lock()\n\n    def add_job(self, job_id, payload):\n        self.jobs.append({'id': job_id, 'payload': payload})\n\n    def process_jobs(self):\n        for job in self.jobs:\n            result = self._run(job['payload'])\n            job_results[job['id']] = result\n            self.jobs.remove(job)\n\n    def _run(self, payload):\n        time.sleep(0.1)\n        return payload.upper()\n\n",
+    "auth.py": "import hashlib\nimport os\nimport time\n\ndef generate_token(user_id):\n    secret = 'hardcoded_secret_key_123'\n    raw = f'{user_id}{secret}{time.time()}'\n    return hashlib.md5(raw.encode()).hexdigest()\n\ndef verify_token(token, user_id):\n    expected = generate_token(user_id)\n    return token == expected\n"
+  },
+  "diff": "--- a/job_processor.py\n+++ b/job_processor.py\n@@ -0,0 +1,21 @@\n+import threading\n+import hashlib\n+import time\n+\n+job_results = {}\n+\n+class JobProcessor:\n+    def __init__(self):\n+        self.jobs = []\n+        self.lock = threading.Lock()\n+\n+    def add_job(self, job_id, payload):\n+        self.jobs.append({'id': job_id, 'payload': payload})\n+\n+    def process_jobs(self):\n+        for job in self.jobs:\n+            result = self._run(job['payload'])\n+            job_results[job['id']] = result\n+            self.jobs.remove(job)\n+\n+    def _run(self, payload):\n+        time.sleep(0.1)\n+        return payload.upper()\n--- a/auth.py\n+++ b/auth.py\n@@ -0,0 +1,12 @@\n+import hashlib\n+import os\n+import time\n+\n+def generate_token(user_id):\n+    secret = 'hardcoded_secret_key_123'\n+    raw = f'{user_id}{secret}{time.time()}'\n+    return hashlib.md5(raw.encode()).hexdigest()\n+\n+def verify_token(token, user_id):\n+    expected = generate_token(user_id)\n+    return token == expected\n",
+  "ground_truth_issues": [
+    {
+      "issue_type": "bug",
+      "line_number": 12,
+      "severity": "high",
+      "description": "Race condition: add_job() appends to self.jobs without acquiring self.lock, causing data corruption under concurrent access",
+      "suggested_fix": "Wrap self.jobs.append() inside with self.lock:"
+    },
+    {
+      "issue_type": "bug",
+      "line_number": 16,
+      "severity": "high",
+      "description": "Mutating a list while iterating over it in process_jobs() causes jobs to be skipped silently",
+      "suggested_fix": "Iterate over a copy: for job in list(self.jobs): or collect removals after the loop"
+    },
+    {
+      "issue_type": "bug",
+      "line_number": 15,
+      "severity": "medium",
+      "description": "job_results is a global dict accessed from multiple threads without any lock — this is a memory/race condition",
+      "suggested_fix": "Protect job_results with a threading.Lock() or use a thread-safe data structure"
+    },
+    {
+      "issue_type": "security",
+      "line_number": 6,
+      "severity": "critical",
+      "description": "Hardcoded secret key in source code — secrets must never be committed to source control",
+      "suggested_fix": "Use os.environ.get('SECRET_KEY') and load from environment variables"
+    },
+    {
+      "issue_type": "security",
+      "line_number": 7,
+      "severity": "critical",
+      "description": "MD5 is a broken cryptographic hash — it must not be used for security-sensitive token generation",
+      "suggested_fix": "Use hmac.new() with SHA-256 or use a library like PyJWT for token generation"
+    },
+    {
+      "issue_type": "bug",
+      "line_number": 11,
+      "severity": "high",
+      "description": "verify_token() calls generate_token() which uses time.time() — the token will never match since time changes between generation and verification",
+      "suggested_fix": "Tokens must embed and verify a timestamp, not regenerate one at verification time"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+name: code-review-assistant
+version: "1.0.0"
+description: "An OpenEnv environment where an AI agent reviews pull requests and identifies bugs, security vulnerabilities, and code quality issues."
+author: "your-hf-username"
+tags:
+  - code-review
+  - software-engineering
+  - security
+  - real-world
+tasks:
+  - name: easy-review
+    description: "Review a short Python function with an off-by-one error and a null dereference bug"
+    difficulty: easy
+    max_steps: 8
+  - name: medium-review
+    description: "Review a web endpoint with SQL injection vulnerability and missing authentication"
+    difficulty: medium
+    max_steps: 10
+  - name: hard-review
+    description: "Review a multi-concern module with a race condition, memory leak, and insecure cryptography"
+    difficulty: hard
+    max_steps: 12
+action_space:
+  type: structured
+  description: "Agent emits structured issue reports with type, line, severity, and message"
+observation_space:
+  type: structured
+  description: "Agent receives PR metadata, unified diff, file contents, and step feedback"
