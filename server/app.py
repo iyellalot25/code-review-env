@@ -1,7 +1,13 @@
-from fastapi import FastAPI
-from server.env import CodeReviewEnv
-from server.models import CodeReviewAction, ResetResult, StepResult, StateResult
+import os
 import uvicorn
+from fastapi import FastAPI
+
+try:
+    from server.env import CodeReviewEnv
+    from server.models import CodeReviewAction, ResetResult, StepResult, StateResult
+except ImportError:
+    from env import CodeReviewEnv
+    from models import CodeReviewAction, ResetResult, StepResult, StateResult
 
 app = FastAPI(
     title="Code Review Assistant OpenEnv",
@@ -58,8 +64,10 @@ def root():
 
 
 def main():
-    """Entry point for the server."""
-    uvicorn.run(app, host="0.0.0.0", port=7860)
+    """Entry point for the server — called by 'uv run server' via [project.scripts]."""
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "7860"))
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":

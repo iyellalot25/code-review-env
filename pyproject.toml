@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.scripts]
-openenv-serve = "server.app:main"
+server = "server.app:main"
 
 [project.optional-dependencies]
 dev = [
