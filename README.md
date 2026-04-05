@@ -1,5 +1,17 @@
 # Code Review Assistant — OpenEnv Environment
 
+---
+title: Code Review Assistant
+emoji: 🔍
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+tags:
+  - openenv
+---
+
+
 An [OpenEnv](https://github.com/openenv/openenv)-compliant benchmark environment where an AI agent reviews pull requests and identifies bugs, security vulnerabilities, and code quality issues. Built for the OpenEnv Hackathon.
 
 ---
