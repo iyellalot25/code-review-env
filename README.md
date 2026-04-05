@@ -58,9 +58,9 @@ The **Code Review Assistant** environment presents an AI agent with realistic Py
 
 | Task             | Estimated Score |
 |------------------|-----------------|
-| `easy-review`    | ~0.45           |
-| `medium-review`  | ~0.30           |
-| `hard-review`    | ~0.15           |
+| `easy-review`    | ~0.75           |
+| `medium-review`  | ~0.75           |
+| `hard-review`    | ~0.57           |
 
 ---
 

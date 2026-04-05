@@ -253,40 +253,51 @@ def main() -> None:
     step_num = 0
     done = False
     error_msg = None
+    issues_flagged = False  # track whether we already submitted issues
 
-    # Strategy: flag all issues in one early step, then submit final verdict
-    # Step 1..N-1: flag issues
-    # Last step: submit request_changes / approve
+    # Strategy:
+    #   Step 1: LLM flags all issues in one shot
+    #   Step 2: submit final verdict (request_changes / approve) — no LLM call needed
     for step_num in range(1, MAX_STEPS + 1):
-        is_final = step_num == MAX_STEPS or done
+        # Force final verdict if: last step, already done, or issues already flagged
+        is_final = step_num == MAX_STEPS or done or issues_flagged
 
         prompt = build_user_prompt(obs, step_num, MAX_STEPS, is_final)
         error_msg = None
+        action = None
 
         try:
-            raw_output = call_llm(client, prompt)
-            action = parse_action(raw_output)
+            if is_final:
+                # No need to call LLM again — just close out the episode
+                action = {
+                    "action_type": "request_changes",
+                    "issues": [],
+                    "comment": "Review complete.",
+                    "final_verdict": "request_changes",
+                }
+            else:
+                raw_output = call_llm(client, prompt)
+                action = parse_action(raw_output)
 
-            # If this is the penultimate step (step MAX_STEPS-1) and we already got
-            # feedback, force a final verdict on the next iteration by using request_changes
-            if is_final and action.get("action_type") not in ("approve", "request_changes"):
-                action["action_type"] = "request_changes"
-                action["final_verdict"] = "request_changes"
-                action["issues"] = []
+                # If LLM returned a closing verdict already, honour it
+                if action.get("action_type") in ("approve", "request_changes"):
+                    is_final = True
+                else:
+                    # Issues submitted — next step will be the closing verdict
+                    issues_flagged = True
 
             step_result = server_step(action)
 
         except Exception as e:
             error_msg = str(e)[:100]
-            # Try a safe fallback action
+            action = {
+                "action_type": "add_comment",
+                "issues": [],
+                "comment": f"Error: {error_msg}",
+                "final_verdict": None,
+            }
             try:
-                fallback = {
-                    "action_type": "add_comment",
-                    "issues": [],
-                    "comment": f"Error: {error_msg}",
-                    "final_verdict": None,
-                }
-                step_result = server_step(fallback)
+                step_result = server_step(action)
             except Exception as e2:
                 log_step(step_num, "error", 0.0, False, str(e2)[:100])
                 break
@@ -304,17 +315,15 @@ def main() -> None:
         log_step(step_num, action_summary, reward, done, error_msg)
 
         if done:
-            final_score = step_result.get("reward", 0.0)
-            # The final step returns cumulative score, not delta
-            # Pull it from info if available
+            # Server returns cumulative F1 score on closing step.
+            # info["score"] is most reliable; fall back to reward field.
             info = step_result.get("info", {})
-            if "score" in info:
-                final_score = info["score"]
+            final_score = info.get("score", step_result.get("reward", 0.0))
             break
 
-    # If we never got a done, calculate from cumulative rewards
+    # If episode never closed, best estimate is the highest reward seen
     if not done:
-        final_score = sum(rewards)
+        final_score = max(rewards) if rewards else 0.0
 
     success = final_score >= SUCCESS_THRESHOLD
     log_end(success=success, steps=step_num, score=round(final_score, 4), rewards=rewards)
