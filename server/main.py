@@ -44,3 +44,7 @@ def state():
 def health():
     """Health check endpoint."""
     return {"status": "ok"}
+
+@app.get("/")
+def root():
+    return {"name": "Code Review Assistant", "status": "running", "endpoints": ["/reset", "/step", "/state", "/health"]}
