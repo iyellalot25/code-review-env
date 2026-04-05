@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from server.env import CodeReviewEnv
 from server.models import CodeReviewAction, ResetResult, StepResult, StateResult
+import uvicorn
 
 app = FastAPI(
     title="Code Review Assistant OpenEnv",
@@ -54,3 +55,12 @@ def root():
         "status": "running",
         "endpoints": ["/reset", "/step", "/state", "/health"],
     }
+
+
+def main():
+    """Entry point for the server."""
+    uvicorn.run(app, host="0.0.0.0", port=7860)
+
+
+if __name__ == "__main__":
+    main()
