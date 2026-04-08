@@ -7,7 +7,7 @@ and logs results in the required OpenEnv stdout format.
 Environment variables:
   API_BASE_URL            LLM API base URL (default: https://router.huggingface.co/v1)
   MODEL_NAME              Model identifier (default: Qwen/Qwen2.5-72B-Instruct)
-  HF_TOKEN                API key for the LLM endpoint
+  API_KEY                 API key injected by validator (also reads HF_TOKEN as fallback)
   CODE_REVIEW_TASK        Task name: easy-review | medium-review | hard-review (default: easy-review)
   CODE_REVIEW_SERVER_URL  FastAPI server URL (default: http://localhost:7860)
 """
@@ -23,7 +23,7 @@ from openai import OpenAI
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-HF_TOKEN = os.getenv("HF_TOKEN", "")
+API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN", "")
 CODE_REVIEW_TASK = os.getenv("CODE_REVIEW_TASK", "easy-review")
 SERVER_URL = os.getenv("CODE_REVIEW_SERVER_URL", "http://localhost:7860")
 SUCCESS_THRESHOLD = 0.3
@@ -80,7 +80,7 @@ def server_step(action: dict) -> dict:
 def make_llm_client() -> OpenAI:
     return OpenAI(
         base_url=API_BASE_URL,
-        api_key=HF_TOKEN if HF_TOKEN else "no-key",
+        api_key=API_KEY if API_KEY else "no-key",
     )
 
 
@@ -253,51 +253,40 @@ def main() -> None:
     step_num = 0
     done = False
     error_msg = None
-    issues_flagged = False  # track whether we already submitted issues
 
-    # Strategy:
-    #   Step 1: LLM flags all issues in one shot
-    #   Step 2: submit final verdict (request_changes / approve) — no LLM call needed
+    # Strategy: flag all issues in one early step, then submit final verdict
+    # Step 1..N-1: flag issues
+    # Last step: submit request_changes / approve
     for step_num in range(1, MAX_STEPS + 1):
-        # Force final verdict if: last step, already done, or issues already flagged
-        is_final = step_num == MAX_STEPS or done or issues_flagged
+        is_final = step_num == MAX_STEPS or done
 
         prompt = build_user_prompt(obs, step_num, MAX_STEPS, is_final)
         error_msg = None
-        action = None
 
         try:
-            if is_final:
-                # No need to call LLM again — just close out the episode
-                action = {
-                    "action_type": "request_changes",
-                    "issues": [],
-                    "comment": "Review complete.",
-                    "final_verdict": "request_changes",
-                }
-            else:
-                raw_output = call_llm(client, prompt)
-                action = parse_action(raw_output)
+            raw_output = call_llm(client, prompt)
+            action = parse_action(raw_output)
 
-                # If LLM returned a closing verdict already, honour it
-                if action.get("action_type") in ("approve", "request_changes"):
-                    is_final = True
-                else:
-                    # Issues submitted — next step will be the closing verdict
-                    issues_flagged = True
+            # If this is the penultimate step (step MAX_STEPS-1) and we already got
+            # feedback, force a final verdict on the next iteration by using request_changes
+            if is_final and action.get("action_type") not in ("approve", "request_changes"):
+                action["action_type"] = "request_changes"
+                action["final_verdict"] = "request_changes"
+                action["issues"] = []
 
             step_result = server_step(action)
 
         except Exception as e:
             error_msg = str(e)[:100]
-            action = {
-                "action_type": "add_comment",
-                "issues": [],
-                "comment": f"Error: {error_msg}",
-                "final_verdict": None,
-            }
+            # Try a safe fallback action
             try:
-                step_result = server_step(action)
+                fallback = {
+                    "action_type": "add_comment",
+                    "issues": [],
+                    "comment": f"Error: {error_msg}",
+                    "final_verdict": None,
+                }
+                step_result = server_step(fallback)
             except Exception as e2:
                 log_step(step_num, "error", 0.0, False, str(e2)[:100])
                 break
@@ -315,15 +304,17 @@ def main() -> None:
         log_step(step_num, action_summary, reward, done, error_msg)
 
         if done:
-            # Server returns cumulative F1 score on closing step.
-            # info["score"] is most reliable; fall back to reward field.
+            final_score = step_result.get("reward", 0.0)
+            # The final step returns cumulative score, not delta
+            # Pull it from info if available
             info = step_result.get("info", {})
-            final_score = info.get("score", step_result.get("reward", 0.0))
+            if "score" in info:
+                final_score = info["score"]
             break
 
-    # If episode never closed, best estimate is the highest reward seen
+    # If we never got a done, calculate from cumulative rewards
     if not done:
-        final_score = max(rewards) if rewards else 0.0
+        final_score = sum(rewards)
 
     success = final_score >= SUCCESS_THRESHOLD
     log_end(success=success, steps=step_num, score=round(final_score, 4), rewards=rewards)
