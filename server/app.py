@@ -1,6 +1,8 @@
 import os
 import uvicorn
 from fastapi import FastAPI
+from typing import Optional
+from pydantic import BaseModel
 
 try:
     from server.env import CodeReviewEnv
@@ -25,10 +27,17 @@ def get_env() -> CodeReviewEnv:
     return _env
 
 
+class ResetRequest(BaseModel):
+    task: Optional[str] = None
+
+
 @app.post("/reset", response_model=ResetResult)
-def reset():
+def reset(request: ResetRequest = None):
     """Reset the environment and return the initial observation."""
     global _env
+    # Allow task to be passed in the request body OR via env var
+    if request and request.task:
+        os.environ["CODE_REVIEW_TASK"] = request.task
     _env = CodeReviewEnv()
     return _env.reset()
 
@@ -64,7 +73,7 @@ def root():
 
 
 def main():
-    """Entry point for the server — called by 'uv run server' via [project.scripts]."""
+    """Entry point for the server."""
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "7860"))
     uvicorn.run(app, host=host, port=port)

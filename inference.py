@@ -7,7 +7,7 @@ and logs results in the required OpenEnv stdout format.
 Environment variables:
   API_BASE_URL            LLM API base URL (default: https://router.huggingface.co/v1)
   MODEL_NAME              Model identifier (default: Qwen/Qwen2.5-72B-Instruct)
-  API_KEY                 API key injected by validator (also reads HF_TOKEN as fallback)
+  HF_TOKEN                API key for the LLM endpoint
   CODE_REVIEW_TASK        Task name: easy-review | medium-review | hard-review (default: easy-review)
   CODE_REVIEW_SERVER_URL  FastAPI server URL (default: http://localhost:7860)
 """
@@ -23,7 +23,7 @@ from openai import OpenAI
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN", "")
+HF_TOKEN = os.getenv("HF_TOKEN", "")
 CODE_REVIEW_TASK = os.getenv("CODE_REVIEW_TASK", "easy-review")
 SERVER_URL = os.getenv("CODE_REVIEW_SERVER_URL", "http://localhost:7860")
 SUCCESS_THRESHOLD = 0.3
@@ -63,7 +63,7 @@ def log_end(success: bool, steps: int, score: float, rewards: list[float]) -> No
 
 def server_reset() -> dict:
     """POST /reset and return the observation dict."""
-    resp = httpx.post(f"{SERVER_URL}/reset", timeout=30)
+    resp = httpx.post(f"{SERVER_URL}/reset", json={"task": CODE_REVIEW_TASK}, timeout=30)
     resp.raise_for_status()
     return resp.json()
 
@@ -80,7 +80,7 @@ def server_step(action: dict) -> dict:
 def make_llm_client() -> OpenAI:
     return OpenAI(
         base_url=API_BASE_URL,
-        api_key=API_KEY if API_KEY else "no-key",
+        api_key=HF_TOKEN if HF_TOKEN else "no-key",
     )
 
 
