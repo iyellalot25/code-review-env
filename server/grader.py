@@ -38,10 +38,10 @@ def match_issue(reported: IssueReport, ground_truth: IssueReport) -> float:
 def grade(reported_issues: List[IssueReport], ground_truth_issues: List[IssueReport]) -> dict:
     if not ground_truth_issues:
         return {
-            "score": 1.0,
-            "recall": 1.0,
-            "precision": 1.0,
-            "f1": 1.0,
+            "score": 0.999,
+            "recall": 0.999,
+            "precision": 0.999,
+            "f1": 0.999,
             "matched": 0,
             "false_positives": len(reported_issues)
         }
@@ -69,7 +69,7 @@ def grade(reported_issues: List[IssueReport], ground_truth_issues: List[IssueRep
     false_positives = len(reported_issues) - true_positives
     fp_penalty = min(0.2, false_positives * 0.05)
 
-    final_score = max(0.0, min(1.0, f1 - fp_penalty))
+    final_score = max(0.001, min(0.999, f1 - fp_penalty))
 
     return {
         "score": round(final_score, 4),
